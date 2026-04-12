@@ -206,7 +206,7 @@ CREATE TABLE Period_Snapshots (
 
 -- إنشاء مستخدم مدير افتراضي (كلمة المرور: admin123)
 INSERT INTO Users (username, password, role, is_active) VALUES 
-('admin', '$2y$12$LJ3m4yT5F8rWx1.UVkXhOelRqmG.BVwJFN9QxLfK3G/JhvZQx3IKm', 'Admin', TRUE);
+('admin', '$2b$12$6lA5RPyqQIdebZh0nj2JLOYuAEz6OxubCHCtwkeG3ogiGJP2.SrC.', 'Admin', TRUE);
 
 -- إعدادات افتراضية
 INSERT INTO Settings (setting_key, setting_value) VALUES 
