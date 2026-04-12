@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>نظام إدارة المياه - لوحة التحكم</title>
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+    <!-- ======= SIDEBAR ======= -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="logo-icon">💧</div>
+            <h2>إدارة المياه</h2>
+        </div>
+        <ul class="sidebar-nav">
+            <li><a href="#" data-page="dashboard" class="active"><span class="nav-icon">📊</span><span class="nav-text">لوحة القيادة</span></a></li>
+            
+            <div class="nav-section-title">العمليات اليومية</div>
+            <li><a href="#" data-page="trips"><span class="nav-icon">🚚</span><span class="nav-text">الرحلات</span></a></li>
+            <li><a href="#" data-page="invoices"><span class="nav-icon">🧾</span><span class="nav-text">الفواتير</span></a></li>
+            <li><a href="#" data-page="settlements"><span class="nav-icon">💰</span><span class="nav-text">تصفية السائقين</span></a></li>
+            
+            <div class="nav-section-title">الإدارة</div>
+            <li><a href="#" data-page="customers"><span class="nav-icon">👥</span><span class="nav-text">العملاء والديون</span></a></li>
+            <li><a href="#" data-page="expenses"><span class="nav-icon">📤</span><span class="nav-text">المصروفات</span></a></li>
+            <li><a href="#" data-page="fund"><span class="nav-icon">🏦</span><span class="nav-text">الصندوق</span></a></li>
+            
+            <div class="nav-section-title">المخزون</div>
+            <li><a href="#" data-page="inventory"><span class="nav-icon">📦</span><span class="nav-text">المخزون</span></a></li>
+            <li><a href="#" data-page="assets"><span class="nav-icon">🏗️</span><span class="nav-text">عهد الزبائن</span></a></li>
+            
+            <div class="nav-section-title">التقارير</div>
+            <li><a href="#" data-page="reports"><span class="nav-icon">📈</span><span class="nav-text">التقارير</span></a></li>
+            <li><a href="#" data-page="periods"><span class="nav-icon">📅</span><span class="nav-text">الفترات المالية</span></a></li>
+            
+            <div class="nav-section-title">النظام</div>
+            <li><a href="#" data-page="drivers"><span class="nav-icon">🧑‍✈️</span><span class="nav-text">السائقين</span></a></li>
+            <li><a href="#" data-page="trucks"><span class="nav-icon">🚛</span><span class="nav-text">الوايتات</span></a></li>
+            <li><a href="#" data-page="settings"><span class="nav-icon">⚙️</span><span class="nav-text">الإعدادات</span></a></li>
+            <li><a href="#" data-page="users" id="navUsers" style="display:none;"><span class="nav-icon">🔑</span><span class="nav-text">المستخدمين</span></a></li>
+        </ul>
+    </aside>
+
+    <!-- ======= TOP HEADER ======= -->
+    <header class="top-header">
+        <div class="header-right">
+            <button class="btn-toggle-sidebar" onclick="toggleSidebar()">☰</button>
+            <span class="header-date" id="headerDate"></span>
+        </div>
+        <div class="header-left">
+            <button class="quick-action-btn" onclick="navigateTo('trips')">+ رحلة جديدة</button>
+            <span class="badge-notification" onclick="navigateTo('customers')" id="notifBadge" style="display:none;">
+                🔔 <span class="badge-count" id="notifCount">0</span>
+            </span>
+            <span class="header-user" id="headerUser">المستخدم</span>
+            <button class="btn btn-sm btn-secondary" onclick="logout()">خروج</button>
+        </div>
+    </header>
+
+    <!-- ======= MAIN CONTENT ======= -->
+    <main class="main-content" id="mainContent">
+        <!-- Content loads dynamically here -->
+    </main>
+
+    <!-- ======= GLOBAL MODALS ======= -->
+    <!-- Invoice Modal -->
+    <div class="modal-backdrop" id="invoiceModal">
+        <div class="modal-dialog" style="max-width: 700px;">
+            <div class="modal-header">
+                <h3>إضافة فاتورة جديدة</h3>
+                <button class="modal-close" onclick="closeModal('invoiceModal')">×</button>
+            </div>
+            <div class="modal-body">
+                <form id="invoiceForm">
+                    <div class="row">
+                        <div class="col-2">
+                            <div class="form-group">
+                                <label class="form-label">الرحلة *</label>
+                                <select class="form-control" name="trip_id" id="invTripId" required></select>
+                            </div>
+                        </div>
+                        <div class="col-2">
+                            <div class="form-group">
+                                <label class="form-label">الزبون *</label>
+                                <select class="form-control" name="customer_id" id="invCustomerId" required></select>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-3">
+                            <div class="form-group">
+                                <label class="form-label">الكمية (م³) *</label>
+                                <input type="number" class="form-control money-input" name="quantity_m3" step="0.01" min="0" required>
+                            </div>
+                        </div>
+                        <div class="col-3">
+                            <div class="form-group">
+                                <label class="form-label">إجمالي المبلغ *</label>
+                                <input type="number" class="form-control money-input" name="total_amount" id="invTotalAmount" step="0.01" min="0" required oninput="calcInvoice()">
+                            </div>
+                        </div>
+                        <div class="col-3">
+                            <div class="form-group">
+                                <label class="form-label">الخصم</label>
+                                <input type="number" class="form-control money-input" name="discount_amount" id="invDiscount" step="0.01" min="0" value="0" oninput="calcInvoice()">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-3">
+                            <div class="form-group">
+                                <label class="form-label">الصافي</label>
+                                <input type="number" class="form-control" name="net_amount" id="invNetAmount" readonly>
+                            </div>
+                        </div>
+                        <div class="col-3">
+                            <div class="form-group">
+                                <label class="form-label">المدفوع نقداً</label>
+                                <input type="number" class="form-control money-input" name="paid_amount" id="invPaidAmount" step="0.01" min="0" value="0" oninput="calcInvoice()">
+                            </div>
+                        </div>
+                        <div class="col-3">
+                            <div class="form-group">
+                                <label class="form-label">المتبقي (الدين)</label>
+                                <input type="number" class="form-control" name="due_amount" id="invDueAmount" readonly>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="financial-total" id="invTotalDisplay">الصافي: 0.00 ريال</div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" onclick="saveInvoice()" id="saveInvoiceBtn">
+                    <span class="spinner"></span>
+                    <span class="btn-text">💾 حفظ الفاتورة</span>
+                </button>
+                <button class="btn btn-secondary" onclick="closeModal('invoiceModal')">إلغاء</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Payment Modal -->
+    <div class="modal-backdrop" id="paymentModal">
+        <div class="modal-dialog">
+            <div class="modal-header">
+                <h3>تسجيل دفعة من زبون</h3>
+                <button class="modal-close" onclick="closeModal('paymentModal')">×</button>
+            </div>
+            <div class="modal-body">
+                <form id="paymentForm">
+                    <input type="hidden" name="settlement_id" id="paySettlementId">
+                    <div class="form-group">
+                        <label class="form-label">الزبون *</label>
+                        <select class="form-control" name="customer_id" id="payCustomerId" required></select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">رصيد الزبون الحالي</label>
+                        <input type="text" class="form-control" id="payCustomerBalance" readonly>
+                    </div>
+                    <div class="row">
+                        <div class="col-2">
+                            <div class="form-group">
+                                <label class="form-label">المبلغ المدفوع *</label>
+                                <input type="number" class="form-control money-input" name="amount_paid" step="0.01" min="0" required>
+                            </div>
+                        </div>
+                        <div class="col-2">
+                            <div class="form-group">
+                                <label class="form-label">مسامحة / خصم</label>
+                                <input type="number" class="form-control money-input" name="discount_amount" step="0.01" min="0" value="0">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">نوع الدفع</label>
+                        <select class="form-control" name="payment_type">
+                            <option value="سداد دين سابق">سداد دين سابق</option>
+                            <option value="دفعة مقدمة">دفعة مقدمة</option>
+                        </select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-success" onclick="savePayment()" id="savePaymentBtn">
+                    <span class="spinner"></span>
+                    <span class="btn-text">💵 تسجيل الدفعة</span>
+                </button>
+                <button class="btn btn-secondary" onclick="closeModal('paymentModal')">إلغاء</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/app.js"></script>
+    <script src="js/pages.js"></script>
+    <script>
+        // Initialize App
+        (async () => {
+            const user = await checkAuth();
+            if (!user) {
+                window.location.href = 'index.html';
+                return;
+            }
+
+            // Set header info
+            document.getElementById('headerUser').textContent = `👤 ${user.username}`;
+            document.getElementById('headerDate').textContent = new Date().toLocaleDateString('ar-SA', { 
+                weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' 
+            });
+
+            // Show admin links
+            if (user.role === 'Admin') {
+                document.getElementById('navUsers').style.display = '';
+            }
+
+            // Check notifications (overdue)
+            const aging = await api.get('/api/customers/debt-aging?days=15');
+            if (aging && aging.status === 'success' && aging.data.length > 0) {
+                document.getElementById('notifBadge').style.display = '';
+                document.getElementById('notifCount').textContent = aging.data.length;
+            }
+
+            // Load initial page from hash or default to dashboard
+            const page = window.location.hash.slice(1) || 'dashboard';
+            navigateTo(page);
+        })();
+    </script>
+</body>
+</html>
