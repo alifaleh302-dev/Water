@@ -101,7 +101,7 @@ class ReportController extends Controller {
         $this->requireAdmin();
         $input = $this->getInput();
         $this->validateRequired($input, ['period_name', 'start_date', 'end_date']);
-        $input['is_closed'] = 0;
+        $input['is_closed'] = false;
         $result = $this->periodModel->create($input);
         $this->json($result, $result['status'] === 'success' ? 201 : 400);
     }
@@ -121,7 +121,7 @@ class ReportController extends Controller {
     }
 
     /**
-     * Dashboard summary
+     * Dashboard summary (PostgreSQL compatible)
      */
     public function dashboard(): void {
         $this->requireAuth();
@@ -131,13 +131,13 @@ class ReportController extends Controller {
         
         // Today's sales
         $todaySales = $db->fetch(
-            "SELECT COALESCE(SUM(net_amount), 0) as total, COALESCE(SUM(paid_amount), 0) as cash, COALESCE(SUM(due_amount), 0) as credit, COUNT(*) as count FROM Invoices WHERE DATE(invoice_date) = ?",
+            "SELECT COALESCE(SUM(net_amount), 0) as total, COALESCE(SUM(paid_amount), 0) as cash, COALESCE(SUM(due_amount), 0) as credit, COUNT(*) as count FROM Invoices WHERE invoice_date::date = ?::date",
             [$today]
         );
         
         // Today's trips
         $todayTrips = $db->fetch(
-            "SELECT COUNT(*) as count FROM Trips WHERE DATE(trip_date) = ?",
+            "SELECT COUNT(*) as count FROM Trips WHERE trip_date::date = ?::date",
             [$today]
         );
         
@@ -153,7 +153,7 @@ class ReportController extends Controller {
         
         // Today's expenses
         $todayExpenses = $db->fetch(
-            "SELECT COALESCE(SUM(amount), 0) as total FROM Expenses WHERE DATE(expense_date) = ?",
+            "SELECT COALESCE(SUM(amount), 0) as total FROM Expenses WHERE expense_date::date = ?::date",
             [$today]
         );
         
@@ -162,9 +162,9 @@ class ReportController extends Controller {
             "SELECT COUNT(*) as count FROM Items WHERE current_stock <= min_limit AND min_limit > 0"
         );
         
-        // Overdue customers (>15 days)
+        // Overdue customers (>15 days) - PostgreSQL
         $overdueCount = $db->fetch(
-            "SELECT COUNT(DISTINCT customer_id) as count FROM Invoices WHERE due_amount > 0 AND DATEDIFF(NOW(), invoice_date) > 15"
+            "SELECT COUNT(DISTINCT customer_id) as count FROM Invoices WHERE due_amount > 0 AND (CURRENT_DATE - invoice_date::date) > 15"
         );
 
         $this->success([

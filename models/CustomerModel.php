@@ -16,19 +16,19 @@ class CustomerModel extends Model {
     }
 
     /**
-     * Get debt aging - customers with invoices overdue > 15 days
+     * Get debt aging - customers with invoices overdue > N days (PostgreSQL)
      */
     public function getDebtAging(int $days = 15): array {
         return $this->db->fetchAll(
             "SELECT c.*, 
                     MIN(i.invoice_date) as oldest_unpaid_date,
-                    DATEDIFF(NOW(), MIN(i.invoice_date)) as days_overdue,
+                    (CURRENT_DATE - MIN(i.invoice_date)::date) as days_overdue,
                     COUNT(i.id) as unpaid_invoice_count,
                     SUM(i.due_amount) as total_overdue_amount
              FROM Customers c
              JOIN Invoices i ON c.id = i.customer_id
              WHERE i.due_amount > 0 
-               AND DATEDIFF(NOW(), i.invoice_date) > ?
+               AND (CURRENT_DATE - i.invoice_date::date) > ?
              GROUP BY c.id
              ORDER BY days_overdue DESC",
             [$days]
@@ -66,21 +66,28 @@ class CustomerModel extends Model {
     }
 
     /**
-     * Get customer statement (account ledger)
+     * Get customer statement (account ledger) - PostgreSQL compatible
      */
     public function getStatement(int $customerId, ?string $fromDate = null, ?string $toDate = null): array {
         $params = [$customerId, $customerId];
-        $dateFilter = '';
+        $dateFilter1 = '';
+        $dateFilter2 = '';
         
         if ($fromDate) {
-            $dateFilter .= " AND transaction_date >= ?";
-            $params[] = $fromDate;
+            $dateFilter1 .= " AND i.invoice_date >= ?";
             $params[] = $fromDate;
         }
         if ($toDate) {
-            $dateFilter .= " AND transaction_date <= ?";
-            $params[] = $toDate . ' 23:59:59';
-            $params[] = $toDate . ' 23:59:59';
+            $dateFilter1 .= " AND i.invoice_date <= (? || ' 23:59:59')::timestamp";
+            $params[] = $toDate;
+        }
+        if ($fromDate) {
+            $dateFilter2 .= " AND ds.settlement_date >= ?";
+            $params[] = $fromDate;
+        }
+        if ($toDate) {
+            $dateFilter2 .= " AND ds.settlement_date <= (? || ' 23:59:59')::timestamp";
+            $params[] = $toDate;
         }
 
         // Combine invoices (debit) and payments (credit)
@@ -88,24 +95,24 @@ class CustomerModel extends Model {
             SELECT * FROM (
                 SELECT 
                     i.invoice_date as transaction_date,
-                    CONCAT('فاتورة #', i.id) as description,
+                    'فاتورة #' || i.id as description,
                     'debit' as type,
                     i.due_amount as debit,
                     0 as credit
                 FROM Invoices i
-                WHERE i.customer_id = ? AND i.due_amount > 0 {$dateFilter}
+                WHERE i.customer_id = ? AND i.due_amount > 0 {$dateFilter1}
                 
                 UNION ALL
                 
                 SELECT 
                     ds.settlement_date as transaction_date,
-                    CONCAT('سداد - سند #', sd.settlement_id) as description,
+                    'سداد - سند #' || sd.settlement_id as description,
                     'credit' as type,
                     0 as debit,
                     sd.amount_paid as credit
                 FROM Settlement_Details sd
                 JOIN Driver_Settlements ds ON sd.settlement_id = ds.id
-                WHERE sd.customer_id = ? {$dateFilter}
+                WHERE sd.customer_id = ? {$dateFilter2}
             ) combined
             ORDER BY transaction_date ASC
         ";

@@ -1,7 +1,7 @@
 <?php
 /**
  * Base Model Class
- * Provides common CRUD operations for all models
+ * Provides common CRUD operations for all models (PostgreSQL compatible)
  */
 class Model {
     protected Database $db;
@@ -57,7 +57,7 @@ class Model {
     }
 
     /**
-     * Create a new record
+     * Create a new record (PostgreSQL - uses RETURNING id)
      */
     public function create(array $data): array {
         $filtered = $this->filterFillable($data);
@@ -69,11 +69,12 @@ class Model {
         $columns = implode(', ', array_keys($filtered));
         $placeholders = implode(', ', array_fill(0, count($filtered), '?'));
         
-        $sql = "INSERT INTO {$this->table} ({$columns}) VALUES ({$placeholders})";
+        $sql = "INSERT INTO {$this->table} ({$columns}) VALUES ({$placeholders}) RETURNING {$this->primaryKey}";
         
         try {
-            $this->db->query($sql, array_values($filtered));
-            $id = $this->db->lastInsertId();
+            $stmt = $this->db->query($sql, array_values($filtered));
+            $row = $stmt->fetch();
+            $id = $row[$this->primaryKey] ?? 0;
             $record = $this->find((int)$id);
             return ['status' => 'success', 'data' => $record, 'message' => 'تم الإضافة بنجاح'];
         } catch (\PDOException $e) {
@@ -126,7 +127,7 @@ class Model {
     }
 
     /**
-     * Search records
+     * Search records (PostgreSQL ILIKE for case-insensitive search)
      */
     public function search(string $query, array $additionalFilters = []): array {
         if (empty($this->searchable)) {
@@ -137,7 +138,7 @@ class Model {
         $params = [];
         
         foreach ($this->searchable as $col) {
-            $conditions[] = "{$col} LIKE ?";
+            $conditions[] = "{$col} ILIKE ?";
             $params[] = "%{$query}%";
         }
         
@@ -186,17 +187,22 @@ class Model {
     }
 
     /**
-     * Parse PDO error into user-friendly message
+     * Parse PDO error into user-friendly message (PostgreSQL compatible)
      */
     protected function parseError(\PDOException $e): string {
         $code = $e->getCode();
-        if ($code == 23000) {
-            if (strpos($e->getMessage(), 'Duplicate entry') !== false) {
-                return 'القيمة موجودة مسبقاً (تكرار)';
-            }
-            if (strpos($e->getMessage(), 'foreign key') !== false) {
-                return 'لا يمكن الحذف لارتباط البيانات بسجلات أخرى';
-            }
+        $message = $e->getMessage();
+        // PostgreSQL unique violation
+        if ($code == 23505 || strpos($message, 'unique constraint') !== false || strpos($message, 'duplicate key') !== false) {
+            return 'القيمة موجودة مسبقاً (تكرار)';
+        }
+        // PostgreSQL foreign key violation
+        if ($code == 23503 || strpos($message, 'foreign key constraint') !== false) {
+            return 'لا يمكن الحذف لارتباط البيانات بسجلات أخرى';
+        }
+        // PostgreSQL not null violation
+        if ($code == 23502) {
+            return 'حقل مطلوب فارغ';
         }
         return 'خطأ في قاعدة البيانات';
     }

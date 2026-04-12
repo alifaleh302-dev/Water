@@ -37,28 +37,28 @@ class FundTransactionModel extends Model {
     }
 
     /**
-     * Get transactions for a date range
+     * Get transactions for a date range (PostgreSQL)
      */
     public function getByDateRange(string $fromDate, string $toDate): array {
         return $this->db->fetchAll(
             "SELECT * FROM {$this->table} 
-             WHERE DATE(transaction_date) >= ? AND DATE(transaction_date) <= ?
+             WHERE transaction_date::date >= ?::date AND transaction_date::date <= ?::date
              ORDER BY id ASC",
             [$fromDate, $toDate]
         );
     }
 
     /**
-     * Get today's transactions
+     * Get today's transactions (PostgreSQL CURRENT_DATE)
      */
     public function getToday(): array {
         return $this->db->fetchAll(
-            "SELECT * FROM {$this->table} WHERE DATE(transaction_date) = CURDATE() ORDER BY id ASC"
+            "SELECT * FROM {$this->table} WHERE transaction_date::date = CURRENT_DATE ORDER BY id ASC"
         );
     }
 
     /**
-     * Get summary for date
+     * Get summary for date (PostgreSQL)
      */
     public function getDaySummary(string $date): array {
         $result = $this->db->fetch(
@@ -66,7 +66,7 @@ class FundTransactionModel extends Model {
                 COALESCE(SUM(CASE WHEN transaction_type = 'In' THEN amount ELSE 0 END), 0) as total_in,
                 COALESCE(SUM(CASE WHEN transaction_type = 'Out' THEN amount ELSE 0 END), 0) as total_out
              FROM {$this->table}
-             WHERE DATE(transaction_date) = ?",
+             WHERE transaction_date::date = ?::date",
             [$date]
         );
         return $result ?: ['total_in' => 0, 'total_out' => 0];

@@ -6,12 +6,12 @@ class FinancialPeriodModel extends Model {
     protected array $fillable = ['period_name', 'start_date', 'end_date', 'is_closed'];
 
     /**
-     * Check if a date falls within a closed period
+     * Check if a date falls within a closed period (PostgreSQL boolean)
      */
     public function isDateInClosedPeriod(string $date): bool {
         $result = $this->db->fetch(
             "SELECT id FROM {$this->table} 
-             WHERE is_closed = 1 AND ? BETWEEN start_date AND end_date
+             WHERE is_closed = true AND ?::date BETWEEN start_date AND end_date
              LIMIT 1",
             [$date]
         );
@@ -19,7 +19,7 @@ class FinancialPeriodModel extends Model {
     }
 
     /**
-     * Close a period and take snapshots
+     * Close a period and take snapshots (PostgreSQL boolean)
      */
     public function closePeriod(int $periodId): array {
         $period = $this->find($periodId);
@@ -35,7 +35,7 @@ class FinancialPeriodModel extends Model {
             $db->beginTransaction();
 
             // Close the period
-            $db->query("UPDATE {$this->table} SET is_closed = 1 WHERE id = ?", [$periodId]);
+            $db->query("UPDATE {$this->table} SET is_closed = true WHERE id = ?", [$periodId]);
 
             // Snapshot customer balances
             $customers = $db->fetchAll("SELECT id, balance FROM Customers");

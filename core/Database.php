@@ -1,7 +1,7 @@
 <?php
 /**
  * Database Singleton Class
- * Handles PDO connection and provides transaction support
+ * Handles PDO connection (PostgreSQL) and provides transaction support
  */
 class Database {
     private static ?Database $instance = null;
@@ -9,7 +9,7 @@ class Database {
 
     private function __construct() {
         $config = require __DIR__ . '/../config/database.php';
-        $dsn = "mysql:host={$config['host']};port={$config['port']};dbname={$config['dbname']};charset={$config['charset']}";
+        $dsn = "pgsql:host={$config['host']};port={$config['port']};dbname={$config['dbname']}";
         $this->pdo = new PDO($dsn, $config['username'], $config['password'], $config['options']);
     }
 
@@ -40,8 +40,8 @@ class Database {
         return $this->pdo->inTransaction();
     }
 
-    public function lastInsertId(): string {
-        return $this->pdo->lastInsertId();
+    public function lastInsertId(?string $sequenceName = null): string {
+        return $this->pdo->lastInsertId($sequenceName);
     }
 
     public function query(string $sql, array $params = []): \PDOStatement {

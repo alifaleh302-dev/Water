@@ -7,16 +7,16 @@ class DriverModel extends Model {
     protected array $searchable = ['name', 'phone'];
 
     /**
-     * Get active drivers only
+     * Get active drivers only (PostgreSQL boolean)
      */
     public function getActive(): array {
         return $this->db->fetchAll(
-            "SELECT * FROM {$this->table} WHERE is_active = 1 ORDER BY name ASC"
+            "SELECT * FROM {$this->table} WHERE is_active = true ORDER BY name ASC"
         );
     }
 
     /**
-     * Get driver daily summary
+     * Get driver daily summary (PostgreSQL DATE cast)
      */
     public function getDailySummary(int $driverId, string $date): array {
         // Total trips and sales
@@ -25,7 +25,7 @@ class DriverModel extends Model {
                 COUNT(t.id) as trip_count,
                 COALESCE(SUM(t.commission_amount), 0) as total_commission
              FROM Trips t 
-             WHERE t.driver_id = ? AND DATE(t.trip_date) = ?",
+             WHERE t.driver_id = ? AND t.trip_date::date = ?::date",
             [$driverId, $date]
         );
 
@@ -38,7 +38,7 @@ class DriverModel extends Model {
                 COALESCE(SUM(i.net_amount), 0) as total_net
              FROM Invoices i
              JOIN Trips t ON i.trip_id = t.id
-             WHERE t.driver_id = ? AND DATE(i.invoice_date) = ?",
+             WHERE t.driver_id = ? AND i.invoice_date::date = ?::date",
             [$driverId, $date]
         );
 
@@ -46,7 +46,7 @@ class DriverModel extends Model {
         $expenses = $this->db->fetch(
             "SELECT COALESCE(SUM(amount), 0) as total_expenses
              FROM Expenses 
-             WHERE driver_id = ? AND DATE(expense_date) = ?",
+             WHERE driver_id = ? AND expense_date::date = ?::date",
             [$driverId, $date]
         );
 

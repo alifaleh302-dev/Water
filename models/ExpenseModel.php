@@ -6,7 +6,7 @@ class ExpenseModel extends Model {
     protected array $fillable = ['expense_date', 'category_id', 'driver_id', 'amount', 'notes'];
 
     /**
-     * Get expenses with details
+     * Get expenses with details (PostgreSQL)
      */
     public function getAllWithDetails(array $filters = []): array {
         $sql = "SELECT e.*, ec.category_name, d.name as driver_name
@@ -18,7 +18,7 @@ class ExpenseModel extends Model {
         $conditions = [];
         
         if (isset($filters['date'])) {
-            $conditions[] = "DATE(e.expense_date) = ?";
+            $conditions[] = "e.expense_date::date = ?::date";
             $params[] = $filters['date'];
         }
         if (isset($filters['driver_id'])) {
@@ -30,11 +30,11 @@ class ExpenseModel extends Model {
             $params[] = $filters['category_id'];
         }
         if (isset($filters['from_date'])) {
-            $conditions[] = "DATE(e.expense_date) >= ?";
+            $conditions[] = "e.expense_date::date >= ?::date";
             $params[] = $filters['from_date'];
         }
         if (isset($filters['to_date'])) {
-            $conditions[] = "DATE(e.expense_date) <= ?";
+            $conditions[] = "e.expense_date::date <= ?::date";
             $params[] = $filters['to_date'];
         }
         
@@ -48,14 +48,14 @@ class ExpenseModel extends Model {
     }
 
     /**
-     * Get driver expenses for a specific date
+     * Get driver expenses for a specific date (PostgreSQL)
      */
     public function getDriverExpenses(int $driverId, string $date): array {
         return $this->db->fetchAll(
             "SELECT e.*, ec.category_name
              FROM {$this->table} e
              LEFT JOIN Expense_Categories ec ON e.category_id = ec.id
-             WHERE e.driver_id = ? AND DATE(e.expense_date) = ?
+             WHERE e.driver_id = ? AND e.expense_date::date = ?::date
              ORDER BY e.id ASC",
             [$driverId, $date]
         );

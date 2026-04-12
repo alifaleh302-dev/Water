@@ -29,15 +29,15 @@ class InvoiceModel extends Model {
             $params[] = $filters['customer_id'];
         }
         if (isset($filters['date'])) {
-            $conditions[] = "DATE(i.invoice_date) = ?";
+            $conditions[] = "i.invoice_date::date = ?::date";
             $params[] = $filters['date'];
         }
         if (isset($filters['from_date'])) {
-            $conditions[] = "DATE(i.invoice_date) >= ?";
+            $conditions[] = "i.invoice_date::date >= ?::date";
             $params[] = $filters['from_date'];
         }
         if (isset($filters['to_date'])) {
-            $conditions[] = "DATE(i.invoice_date) <= ?";
+            $conditions[] = "i.invoice_date::date <= ?::date";
             $params[] = $filters['to_date'];
         }
 
@@ -58,7 +58,7 @@ class InvoiceModel extends Model {
     }
 
     /**
-     * Get cash sales for driver on a date
+     * Get cash sales for driver on a date (PostgreSQL)
      */
     public function getDriverCashSales(int $driverId, string $date): array {
         return $this->db->fetchAll(
@@ -66,20 +66,20 @@ class InvoiceModel extends Model {
              FROM {$this->table} i
              JOIN Trips t ON i.trip_id = t.id
              LEFT JOIN Customers c ON i.customer_id = c.id
-             WHERE t.driver_id = ? AND DATE(i.invoice_date) = ?
+             WHERE t.driver_id = ? AND i.invoice_date::date = ?::date
              ORDER BY i.id ASC",
             [$driverId, $date]
         );
     }
 
     /**
-     * Get sales summary grouped by day or month
+     * Get sales summary grouped by day or month (PostgreSQL TO_CHAR)
      */
     public function getSalesSummary(string $groupBy = 'day', ?string $fromDate = null, ?string $toDate = null): array {
-        $dateFormat = $groupBy === 'month' ? '%Y-%m' : '%Y-%m-%d';
+        $dateFormat = $groupBy === 'month' ? 'YYYY-MM' : 'YYYY-MM-DD';
         
         $sql = "SELECT 
-                    DATE_FORMAT(invoice_date, '{$dateFormat}') as period,
+                    TO_CHAR(invoice_date, '{$dateFormat}') as period,
                     COUNT(*) as invoice_count,
                     SUM(total_amount) as total,
                     SUM(discount_amount) as discount,
@@ -93,11 +93,11 @@ class InvoiceModel extends Model {
         $conditions = [];
         
         if ($fromDate) {
-            $conditions[] = "DATE(invoice_date) >= ?";
+            $conditions[] = "invoice_date::date >= ?::date";
             $params[] = $fromDate;
         }
         if ($toDate) {
-            $conditions[] = "DATE(invoice_date) <= ?";
+            $conditions[] = "invoice_date::date <= ?::date";
             $params[] = $toDate;
         }
         
@@ -111,11 +111,11 @@ class InvoiceModel extends Model {
     }
 
     /**
-     * Get water consumption report
+     * Get water consumption report (PostgreSQL)
      */
     public function getWaterConsumption(?string $fromDate = null, ?string $toDate = null): array {
         $sql = "SELECT 
-                    DATE_FORMAT(invoice_date, '%Y-%m-%d') as date,
+                    TO_CHAR(invoice_date, 'YYYY-MM-DD') as date,
                     SUM(quantity_m3) as total_m3,
                     COUNT(*) as invoice_count
                 FROM {$this->table}";
@@ -124,11 +124,11 @@ class InvoiceModel extends Model {
         $conditions = [];
         
         if ($fromDate) {
-            $conditions[] = "DATE(invoice_date) >= ?";
+            $conditions[] = "invoice_date::date >= ?::date";
             $params[] = $fromDate;
         }
         if ($toDate) {
-            $conditions[] = "DATE(invoice_date) <= ?";
+            $conditions[] = "invoice_date::date <= ?::date";
             $params[] = $toDate;
         }
         
