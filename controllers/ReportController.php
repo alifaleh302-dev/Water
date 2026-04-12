@@ -101,7 +101,8 @@ class ReportController extends Controller {
         $this->requireAdmin();
         $input = $this->getInput();
         $this->validateRequired($input, ['period_name', 'start_date', 'end_date']);
-        $input['is_closed'] = false;
+        // is_closed defaults to FALSE in the database schema
+        unset($input['is_closed']);
         $result = $this->periodModel->create($input);
         $this->json($result, $result['status'] === 'success' ? 201 : 400);
     }
