@@ -1,4 +1,9 @@
 RewriteEngine On
+
+# Handle api.php/api/... paths (legacy/cached browser requests)
+RewriteRule ^api\.php/(.*)$ api.php/$1 [QSA,L]
+
+# Route all /api/* requests to api.php
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule ^api/(.*)$ api.php [QSA,L]

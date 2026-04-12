@@ -43,7 +43,6 @@ class Router {
      * Add middleware to the last registered route
      */
     public function middleware(string $middlewareName): self {
-        // Get the last registered route
         foreach (['DELETE', 'PUT', 'POST', 'GET'] as $httpMethod) {
             if (!empty($this->routes[$httpMethod])) {
                 $lastPath = array_key_last($this->routes[$httpMethod]);
@@ -93,7 +92,6 @@ class Router {
                 if (preg_match($pattern, $requestUri, $matches)) {
                     $matchedRoute = $route;
                     $matchedPath = $path;
-                    // Extract named parameters
                     array_shift($matches);
                     $_GET = array_merge($_GET, $matches);
                     break;
@@ -104,7 +102,11 @@ class Router {
         if (!$matchedRoute) {
             http_response_code(404);
             header('Content-Type: application/json; charset=utf-8');
-            echo json_encode(['status' => 'error', 'message' => 'المسار غير موجود'], JSON_UNESCAPED_UNICODE);
+            echo json_encode([
+                'status' => 'error',
+                'message' => 'المسار غير موجود',
+                'debug_path' => $requestUri
+            ], JSON_UNESCAPED_UNICODE);
             exit;
         }
 
@@ -144,22 +146,50 @@ class Router {
     }
 
     /**
-     * Get the request path
+     * Get the request path - robust version for Render/Docker/Apache
      */
     private function getRequestPath(): string {
-        $uri = $_SERVER['REQUEST_URI'];
-        $basePath = dirname($_SERVER['SCRIPT_NAME']);
-        
-        if ($basePath !== '/' && $basePath !== '\\') {
-            $uri = substr($uri, strlen($basePath));
-        }
+        $uri = $_SERVER['REQUEST_URI'] ?? '/';
         
         // Remove query string
         if (($pos = strpos($uri, '?')) !== false) {
             $uri = substr($uri, 0, $pos);
         }
         
-        return '/' . trim($uri, '/');
+        // Decode URL
+        $uri = rawurldecode($uri);
+        
+        // Remove api.php prefix if present (handles: /api.php/api/... or api.php/api/...)
+        $uri = preg_replace('#/?(api\.php)#', '', $uri);
+        
+        // Remove SCRIPT_NAME base path if not root
+        $scriptName = $_SERVER['SCRIPT_NAME'] ?? '';
+        $basePath = dirname($scriptName);
+        if ($basePath !== '/' && $basePath !== '\\' && $basePath !== '.' && !empty($basePath)) {
+            if (strpos($uri, $basePath) === 0) {
+                $uri = substr($uri, strlen($basePath));
+            }
+        }
+        
+        // Clean up: ensure starts with / and no trailing slash (except root)
+        $uri = '/' . trim($uri, '/');
+        
+        // Ensure /api prefix is there
+        if ($uri !== '/' && strpos($uri, '/api') !== 0) {
+            // If path doesn't start with /api, try prepending it
+            if (strpos($uri, '/auth') === 0 || strpos($uri, '/drivers') === 0 || 
+                strpos($uri, '/trucks') === 0 || strpos($uri, '/customers') === 0 ||
+                strpos($uri, '/trips') === 0 || strpos($uri, '/invoices') === 0 ||
+                strpos($uri, '/settlements') === 0 || strpos($uri, '/expenses') === 0 ||
+                strpos($uri, '/fund') === 0 || strpos($uri, '/inventory') === 0 ||
+                strpos($uri, '/reports') === 0 || strpos($uri, '/settings') === 0 ||
+                strpos($uri, '/users') === 0 || strpos($uri, '/dashboard') === 0 ||
+                strpos($uri, '/periods') === 0) {
+                $uri = '/api' . $uri;
+            }
+        }
+        
+        return $uri;
     }
 
     /**
@@ -168,7 +198,8 @@ class Router {
     private function sendCorsHeaders(): void {
         header('Access-Control-Allow-Origin: *');
         header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
-        header('Access-Control-Allow-Headers: Content-Type, Authorization');
+        header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
+        header('Access-Control-Max-Age: 86400');
     }
 
     /**
