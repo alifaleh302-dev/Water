@@ -4,18 +4,21 @@ require_once __DIR__ . '/../models/InvoiceModel.php';
 require_once __DIR__ . '/../models/TripModel.php';
 require_once __DIR__ . '/../models/CustomerModel.php';
 require_once __DIR__ . '/../services/FundService.php';
+require_once __DIR__ . '/../services/CalculationService.php';
 
 class InvoiceController extends Controller {
     private InvoiceModel $model;
     private TripModel $tripModel;
     private CustomerModel $customerModel;
     private FundService $fundService;
+    private CalculationService $calc;
 
     public function __construct() {
         $this->model = new InvoiceModel();
         $this->tripModel = new TripModel();
         $this->customerModel = new CustomerModel();
         $this->fundService = new FundService();
+        $this->calc = new CalculationService();
     }
 
     public function index(): void {
@@ -41,7 +44,7 @@ class InvoiceController extends Controller {
     public function store(): void {
         $user = $this->requireAuth();
         $input = $this->getInput();
-        $this->validateRequired($input, ['trip_id', 'customer_id', 'quantity_m3', 'total_amount', 'net_amount']);
+        $this->validateRequired($input, ['trip_id', 'customer_id', 'quantity_m3']);
         $this->validatePositiveAmounts($input, ['quantity_m3', 'total_amount', 'discount_amount', 'net_amount', 'paid_amount', 'due_amount']);
 
         // Validate: Trip must be Open
@@ -59,15 +62,12 @@ class InvoiceController extends Controller {
             $this->error('الزبون غير موجود');
         }
 
-        // Calculate amounts (server-side validation)
-        $totalAmount = (float)$input['total_amount'];
-        $discountAmount = (float)($input['discount_amount'] ?? 0);
-        $netAmount = $totalAmount - $discountAmount;
-        $paidAmount = (float)($input['paid_amount'] ?? 0);
-        $dueAmount = $netAmount - $paidAmount;
-
-        $input['net_amount'] = $netAmount;
-        $input['due_amount'] = $dueAmount;
+        // Smart Calculation Service: server-side single source of truth
+        $calculated = $this->calc->calculateInvoice($input);
+        foreach ($calculated as $k => $v) { $input[$k] = $v; }
+        $paidAmount = $calculated['paid_amount'];
+        $dueAmount  = $calculated['due_amount'];
+        $input['created_by'] = (int)$user['id'];
 
         $db = Database::getInstance();
         

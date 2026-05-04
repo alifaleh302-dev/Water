@@ -184,5 +184,19 @@ $router->post('/api/periods', 'ReportController', 'storePeriod');
 $router->post('/api/periods/close', 'ReportController', 'closePeriod');
 $router->get('/api/periods/snapshots', 'ReportController', 'periodSnapshots');
 
+// ========================
+// Smart Calculation Engine (Phase 1)
+// ========================
+$router->post('/api/calc/invoice', 'CalcController', 'invoice');
+$router->get('/api/calc/defaults', 'CalcController', 'defaults');
+
+// ========================
+// Drafts (Phase 2 - Data Resilience, server-side sync)
+// ========================
+$router->get('/api/drafts', 'DraftController', 'index');
+$router->get('/api/drafts/show', 'DraftController', 'show');
+$router->post('/api/drafts', 'DraftController', 'store');
+$router->delete('/api/drafts', 'DraftController', 'destroy');
+
 // Dispatch the request
 $router->dispatch();

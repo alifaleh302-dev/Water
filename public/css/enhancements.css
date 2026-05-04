@@ -1,0 +1,321 @@
+/* ============================================
+   Phase 1-3 UX Enhancements Stylesheet
+   Re-engineering visual layer to match SAP/Xero/QuickBooks patterns
+============================================ */
+
+/* ====== Draft Indicator ====== */
+.draft-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.85rem;
+    padding: 4px 10px;
+    border-radius: 16px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    background: #f8f9fa;
+}
+.draft-indicator .draft-saved   { color: #10b981; }
+.draft-indicator .draft-saving  { color: #f59e0b; }
+.draft-indicator .draft-offline { color: #ef4444; }
+.draft-indicator .draft-synced  { color: #3b82f6; }
+.draft-indicator .draft-empty   { color: #94a3b8; }
+.draft-indicator .draft-restored {
+    color: #6366f1;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.link-btn {
+    background: none;
+    border: 1px solid #6366f1;
+    color: #6366f1;
+    cursor: pointer;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    transition: all 0.15s;
+}
+.link-btn:hover { background: #6366f1; color: #fff; }
+
+/* ====== Searchable Select ====== */
+.ss-wrapper {
+    position: relative;
+    width: 100%;
+}
+.ss-control {
+    position: relative;
+}
+.ss-input {
+    cursor: pointer;
+    padding-left: 28px !important;
+    width: 100%;
+}
+.ss-arrow {
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #6c757d;
+    pointer-events: none;
+    transition: transform 0.15s;
+}
+.ss-wrapper.open .ss-arrow { transform: translateY(-50%) rotate(180deg); }
+.ss-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    margin-top: 4px;
+    z-index: 1050;
+    max-height: 280px;
+    overflow-y: auto;
+}
+.ss-list { padding: 4px 0; }
+.ss-item {
+    padding: 8px 12px;
+    cursor: pointer;
+    border-bottom: 1px solid #f0f0f0;
+    transition: background 0.1s;
+}
+.ss-item:last-child { border-bottom: none; }
+.ss-item.highlighted, .ss-item:hover {
+    background: #eff6ff;
+}
+.ss-item-label { font-weight: 500; color: #1f2937; }
+.ss-item-sub   { font-size: 0.8rem; color: #6c757d; margin-top: 2px; }
+.ss-empty {
+    padding: 16px;
+    text-align: center;
+    color: #94a3b8;
+}
+
+/* ====== Live Calculation Display Box ====== */
+.calc-summary-card {
+    background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%);
+    border: 1px solid #c7d2fe;
+    border-radius: 10px;
+    padding: 14px 18px;
+    margin: 12px 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+}
+.calc-summary-item {
+    text-align: center;
+}
+.calc-summary-item .label {
+    font-size: 0.78rem;
+    color: #4c1d95;
+    font-weight: 600;
+    margin-bottom: 4px;
+    display: block;
+}
+.calc-summary-item .value {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: #1e1b4b;
+    direction: ltr;
+    display: block;
+}
+.calc-summary-item.highlight .value { color: #059669; font-size: 1.35rem; }
+.calc-summary-item.danger .value    { color: #dc2626; }
+
+/* ====== Keyboard Shortcuts Help Modal ====== */
+.shortcut-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+.shortcut-table tr {
+    border-bottom: 1px solid #f0f0f0;
+}
+.shortcut-table td {
+    padding: 10px 12px;
+}
+.shortcut-table td:first-child {
+    width: 30%;
+    text-align: left;
+    direction: ltr;
+}
+kbd {
+    background: #1f2937;
+    color: #f9fafb;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    font-family: monospace;
+    border: 1px solid #374151;
+    box-shadow: 0 2px 0 #111827;
+    margin: 0 2px;
+}
+
+/* ====== Help Trigger Button (floating) ====== */
+.help-fab {
+    position: fixed;
+    bottom: 24px;
+    left: 24px;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: #4f46e5;
+    color: #fff;
+    border: none;
+    font-size: 1.3rem;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(79,70,229,0.4);
+    z-index: 100;
+    transition: all 0.2s;
+}
+.help-fab:hover { transform: scale(1.1); background: #4338ca; }
+
+/* ====== Smart Field Highlighting ====== */
+.form-control.auto-filled {
+    background: #f0fdf4;
+    border-color: #86efac;
+    transition: all 0.3s;
+}
+.form-control.auto-filled:focus {
+    background: #fff;
+}
+.form-control.field-warning {
+    border-color: #fbbf24;
+    background: #fffbeb;
+}
+.form-control.field-error {
+    border-color: #f87171;
+    background: #fef2f2;
+}
+
+/* ====== Sticky Table Header ====== */
+.data-table thead th {
+    position: sticky;
+    top: 0;
+    background: #f8f9fa;
+    z-index: 5;
+}
+
+/* ====== Row hover highlight ====== */
+.data-table tbody tr {
+    transition: background 0.15s;
+}
+.data-table tbody tr:hover {
+    background: #f0f9ff !important;
+    cursor: pointer;
+}
+.data-table tbody tr.row-selected {
+    background: #dbeafe !important;
+}
+
+/* ====== Empty State ====== */
+.empty-state.compact {
+    padding: 30px;
+    text-align: center;
+    color: #94a3b8;
+}
+
+/* ====== Status Pill (online/offline) ====== */
+.status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.8rem;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-weight: 500;
+}
+.status-pill.online   { background: #dcfce7; color: #166534; }
+.status-pill.offline  { background: #fee2e2; color: #991b1b; }
+
+/* ====== Smooth focus ring ====== */
+.form-control:focus {
+    outline: none;
+    border-color: #6366f1;
+    box-shadow: 0 0 0 3px rgba(99,102,241,0.15);
+}
+
+/* ====== Quick badges within form ====== */
+.field-hint {
+    font-size: 0.78rem;
+    color: #6b7280;
+    margin-top: 2px;
+}
+.field-hint.warn { color: #d97706; }
+.field-hint.danger { color: #dc2626; }
+
+/* ====== Animated indicator dot ====== */
+@keyframes pulse-saving {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.4; }
+}
+.draft-saving { animation: pulse-saving 1.4s ease-in-out infinite; }
+
+/* ====== Customer Credit Limit warning ====== */
+.credit-warning {
+    background: #fef2f2;
+    border-left: 4px solid #ef4444;
+    padding: 8px 12px;
+    border-radius: 4px;
+    color: #991b1b;
+    font-size: 0.9rem;
+    margin: 8px 0;
+}
+
+/* ====== Sidebar nav: hint kbd badge ====== */
+.sidebar-nav a {
+    position: relative;
+}
+.sidebar-nav a .nav-kbd {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 0.7rem;
+    background: rgba(0,0,0,0.2);
+    color: #fff;
+    padding: 1px 6px;
+    border-radius: 3px;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+.sidebar-nav a:hover .nav-kbd { opacity: 1; }
+
+/* ====== Loading overlay during save ====== */
+.form-locked {
+    pointer-events: none;
+    opacity: 0.6;
+    position: relative;
+}
+
+/* ====== Hide spinner up arrows on number inputs ====== */
+input[type="number"].clean::-webkit-outer-spin-button,
+input[type="number"].clean::-webkit-inner-spin-button {
+    -webkit-appearance: none; margin: 0;
+}
+input[type="number"].clean { -moz-appearance: textfield; }
+
+/* ====== Print-friendly ====== */
+@media print {
+    .draft-indicator, .help-fab, .modal-backdrop, .sidebar, .top-header {
+        display: none !important;
+    }
+    .main-content { margin: 0 !important; padding: 12px !important; }
+}
+
+/* ====== Mobile responsive tweaks ====== */
+@media (max-width: 640px) {
+    .calc-summary-card {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 8px;
+        padding: 10px;
+    }
+    .help-fab {
+        bottom: 16px;
+        left: 16px;
+        width: 42px;
+        height: 42px;
+    }
+}

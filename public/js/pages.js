@@ -1,6 +1,9 @@
 /**
- * Water Management System - Page Modules
- * Each page registers itself and provides load/render functions
+ * Water Management System - Page Modules (RE-ENGINEERED v2.0)
+ * - Smart Calculations Engine integration
+ * - Draft auto-save (IndexedDB + Server sync)
+ * - Searchable Selects
+ * - Keyboard Shortcuts ready
  */
 
 // ============================================
@@ -22,6 +25,16 @@ registerPage('dashboard', async () => {
         <div class="row" style="margin-top:20px;">
             <div class="col-2"><div class="card"><div class="card-header">📈 ملخص مبيعات اليوم</div><div class="card-body" id="dashSalesInfo">جاري التحميل...</div></div></div>
             <div class="col-2"><div class="card"><div class="card-header">⚠️ تنبيهات</div><div class="card-body" id="dashAlerts">جاري التحميل...</div></div></div>
+        </div>
+        <div class="row" style="margin-top:20px;">
+            <div class="col-1"><div class="card"><div class="card-header">⚡ إجراءات سريعة (اضغط <kbd>F9</kbd> للفاتورة)</div>
+            <div class="card-body" style="display:flex;gap:12px;flex-wrap:wrap;">
+                <button class="btn btn-primary" onclick="navigateTo('trips')">🚚 رحلة جديدة</button>
+                <button class="btn btn-success" onclick="openNewInvoice()">🧾 فاتورة جديدة</button>
+                <button class="btn btn-warning" onclick="navigateTo('settlements')">💰 تصفية سائق</button>
+                <button class="btn btn-info" onclick="navigateTo('expenses')">📤 تسجيل مصروف</button>
+                <button class="btn btn-secondary" onclick="Shortcuts._showHelp()">⌨️ اختصارات</button>
+            </div></div></div>
         </div>`;
 
     const result = await api.get('/api/dashboard');
@@ -86,7 +99,7 @@ registerPage('trips', async () => {
     mc.innerHTML = `
         <div class="page-header">
             <h1>🚚 إدارة الرحلات</h1>
-            <button class="btn btn-primary" onclick="openTripForm()">+ رحلة جديدة</button>
+            <button class="btn btn-primary" data-quick-new onclick="openTripForm()">+ رحلة جديدة <kbd>Ctrl+N</kbd></button>
         </div>
         <div class="card">
             <div class="card-header">
@@ -101,7 +114,10 @@ registerPage('trips', async () => {
         </div>
         <!-- Trip Form Card -->
         <div class="card" id="tripFormCard" style="display:none;">
-            <div class="card-header">إضافة رحلة جديدة</div>
+            <div class="card-header">
+                <span>إضافة رحلة جديدة</span>
+                <span class="draft-indicator" id="tripDraftIndicator"></span>
+            </div>
             <div class="card-body">
                 <form id="tripForm">
                     <div class="row">
@@ -120,15 +136,16 @@ registerPage('trips', async () => {
                         <div class="col-3">
                             <div class="form-group">
                                 <label class="form-label">عمولة السائق</label>
-                                <input type="number" class="form-control money-input" name="commission_amount" id="tripCommission" step="0.01" min="0" readonly>
+                                <input type="number" class="form-control money-input auto-filled" name="commission_amount" id="tripCommission" step="0.01" min="0">
+                                <span class="field-hint">تحدد آلياً حسب سعة الوايت من الإعدادات</span>
                             </div>
                         </div>
                     </div>
                     <button type="button" class="btn btn-success" onclick="saveTrip()" id="saveTripBtn">
                         <span class="spinner"></span>
-                        <span class="btn-text">💾 فتح الرحلة</span>
+                        <span class="btn-text">💾 فتح الرحلة (Ctrl+S)</span>
                     </button>
-                    <button type="button" class="btn btn-secondary" onclick="document.getElementById('tripFormCard').style.display='none'">إلغاء</button>
+                    <button type="button" class="btn btn-secondary" onclick="cancelTripForm()">إلغاء (Esc)</button>
                 </form>
             </div>
         </div>`;
@@ -162,6 +179,16 @@ async function loadTrips() {
 function openTripForm() {
     document.getElementById('tripFormCard').style.display = '';
     resetForm('tripForm');
+    // Bind draft auto-save
+    DraftManager.bindForm('tripForm', 'trip_form', {
+        indicator: document.getElementById('tripDraftIndicator')
+    });
+    setTimeout(() => document.getElementById('tripDriverId')?.focus(), 100);
+}
+
+function cancelTripForm() {
+    document.getElementById('tripFormCard').style.display = 'none';
+    DraftManager.unbind('tripForm', false); // keep draft if user accidentally clicks
 }
 
 async function onTruckChange() {
@@ -169,7 +196,10 @@ async function onTruckChange() {
     if (!truckId) return;
     const result = await api.get(`/api/trips/commission?truck_id=${truckId}`);
     if (result && result.status === 'success') {
-        document.getElementById('tripCommission').value = result.data.commission_amount;
+        const el = document.getElementById('tripCommission');
+        el.value = result.data.commission_amount;
+        el.classList.add('auto-filled');
+        showToast('تم تحديد العمولة آلياً', 'info', 1500);
     }
 }
 
@@ -180,7 +210,8 @@ async function saveTrip() {
     const result = await api.post('/api/trips', data);
     setButtonLoading(btn, false);
     if (result.status === 'success') {
-        showToast('تم فتح الرحلة بنجاح');
+        showToast('تم فتح الرحلة بنجاح ✅');
+        DraftManager.unbind('tripForm', true);
         document.getElementById('tripFormCard').style.display = 'none';
         loadTrips();
     } else {
@@ -206,37 +237,57 @@ function openInvoiceForTrip(tripId) {
     document.querySelector('[name="trip_id"]').value = tripId;
     openModal('invoiceModal');
     setupEnterNavigation('invoiceForm');
+    bindInvoiceCalc();
 }
 
 // ============================================
-// INVOICE CALCULATIONS (Frontend)
+// INVOICE — SMART REAL-TIME CALCULATIONS
 // ============================================
+function bindInvoiceCalc() {
+    // Bind calc-engine to invoice form (live updates)
+    Calc.bindInvoiceForm('invoiceForm', (result) => {
+        // Update visible total summary
+        const display = document.getElementById('invTotalDisplay');
+        if (display) {
+            const c = Calc.defaults.currency;
+            display.innerHTML = `
+            <div class="calc-summary-card">
+                <div class="calc-summary-item"><span class="label">الكمية</span><span class="value">${result.quantity_m3} م³</span></div>
+                <div class="calc-summary-item"><span class="label">السعر/م³</span><span class="value">${Calc.fmt(result.price_per_m3)}</span></div>
+                <div class="calc-summary-item"><span class="label">الإجمالي</span><span class="value">${Calc.fmt(result.total_amount)}</span></div>
+                <div class="calc-summary-item"><span class="label">الخصم</span><span class="value">${Calc.fmt(result.discount_amount)}</span></div>
+                ${result.vat_rate > 0 ? `<div class="calc-summary-item"><span class="label">الضريبة (${result.vat_rate}%)</span><span class="value">${Calc.fmt(result.vat_amount)}</span></div>` : ''}
+                <div class="calc-summary-item highlight"><span class="label">الصافي</span><span class="value">${Calc.fmt(result.net_amount)} ${c}</span></div>
+                <div class="calc-summary-item ${result.due_amount > 0 ? 'danger' : ''}"><span class="label">المتبقي (دين)</span><span class="value">${Calc.fmt(result.due_amount)}</span></div>
+            </div>`;
+        }
+    });
+
+    // Bind draft auto-save
+    DraftManager.bindForm('invoiceForm', 'invoice_modal', {
+        indicator: document.getElementById('invDraftIndicator')
+    });
+}
+
+// Legacy function — kept for compatibility but now uses Calc engine
 function calcInvoice() {
-    const total = parseFloat(document.getElementById('invTotalAmount')?.value) || 0;
-    const discount = parseFloat(document.getElementById('invDiscount')?.value) || 0;
-    const paid = parseFloat(document.getElementById('invPaidAmount')?.value) || 0;
-    
-    const net = total - discount;
-    const due = net - paid;
-    
-    document.getElementById('invNetAmount').value = net.toFixed(2);
-    document.getElementById('invDueAmount').value = due.toFixed(2);
-    
-    const display = document.getElementById('invTotalDisplay');
-    if (display) {
-        display.textContent = `الصافي: ${formatMoney(net)} ريال | المتبقي: ${formatMoney(due)} ريال`;
-        display.className = due > 0 ? 'financial-total danger' : 'financial-total success';
-    }
+    const form = document.getElementById('invoiceForm');
+    if (form && form._calcHandler) form._calcHandler();
 }
 
 async function saveInvoice() {
     const btn = document.getElementById('saveInvoiceBtn');
     setButtonLoading(btn, true);
     const data = getFormData('invoiceForm');
+    // Re-compute on client (UX); server re-validates
+    const computed = Calc.invoice(data);
+    Object.assign(data, computed);
+
     const result = await api.post('/api/invoices', data);
     setButtonLoading(btn, false);
     if (result.status === 'success') {
-        showToast('تم حفظ الفاتورة بنجاح');
+        showToast('تم حفظ الفاتورة بنجاح ✅');
+        DraftManager.unbind('invoiceForm', true);
         closeModal('invoiceModal');
         if (typeof loadTrips === 'function') loadTrips();
         if (typeof loadInvoices === 'function') loadInvoices();
@@ -253,7 +304,7 @@ registerPage('invoices', async () => {
     mc.innerHTML = `
         <div class="page-header">
             <h1>🧾 الفواتير</h1>
-            <button class="btn btn-primary" onclick="openNewInvoice()">+ فاتورة جديدة</button>
+            <button class="btn btn-primary" data-quick-new onclick="openNewInvoice()">+ فاتورة جديدة <kbd>F9</kbd></button>
         </div>
         <div class="card">
             <div class="card-header">
@@ -290,8 +341,10 @@ async function loadInvoices() {
 }
 
 async function openNewInvoice() {
+    // Load smart defaults first
+    await Calc.loadDefaults();
+
     await loadSelect('invTripId', '/api/trips/open', 'id', 'id', 'اختر الرحلة...');
-    // Customize trip options to show driver name
     const trips = await api.get('/api/trips/open');
     if (trips && trips.status === 'success') {
         const sel = document.getElementById('invTripId');
@@ -302,7 +355,19 @@ async function openNewInvoice() {
     }
     await loadSelect('invCustomerId', '/api/customers', 'id', 'name', 'اختر الزبون...');
     resetForm('invoiceForm');
+
+    // Auto-fill price_per_m3 from settings
+    const priceField = document.querySelector('#invoiceForm [name="price_per_m3"]');
+    if (priceField) {
+        priceField.value = Calc.defaults.price_per_m3;
+        priceField.classList.add('auto-filled');
+    }
+
     openModal('invoiceModal');
+    bindInvoiceCalc();
+
+    // Focus on first interactive field
+    setTimeout(() => document.getElementById('invTripId')?.focus(), 100);
 }
 
 // ============================================
@@ -313,21 +378,24 @@ registerPage('customers', async () => {
     mc.innerHTML = `
         <div class="page-header">
             <h1>👥 العملاء والديون</h1>
-            <button class="btn btn-primary" onclick="openCustomerForm()">+ إضافة عميل</button>
+            <button class="btn btn-primary" data-quick-new onclick="openCustomerForm()">+ إضافة عميل</button>
         </div>
         <div class="card">
             <div class="card-header">قائمة العملاء</div>
             <div class="card-body">
                 <div class="search-bar">
                     <span class="search-icon">🔍</span>
-                    <input type="text" class="form-control" id="customerSearch" placeholder="بحث بالاسم أو الهاتف أو الحي..." oninput="searchCustomers()">
+                    <input type="text" class="form-control" id="customerSearch" placeholder="بحث بالاسم أو الهاتف أو الحي... (اضغط /)" oninput="searchCustomers()">
                 </div>
                 <div id="customersTable"></div>
             </div>
         </div>
         <!-- Customer Form -->
         <div class="card" id="customerFormCard" style="display:none;">
-            <div class="card-header" id="customerFormTitle">إضافة عميل جديد</div>
+            <div class="card-header">
+                <span id="customerFormTitle">إضافة عميل جديد</span>
+                <span class="draft-indicator" id="customerDraftIndicator"></span>
+            </div>
             <div class="card-body">
                 <form id="customerForm">
                     <input type="hidden" name="id" id="custId">
@@ -352,6 +420,13 @@ registerPage('customers', async () => {
                         </div>
                     </div>
                     <div class="row">
+                        <div class="col-3">
+                            <div class="form-group">
+                                <label class="form-label">حد الائتمان (دين مسموح)</label>
+                                <input type="number" class="form-control money-input" name="credit_limit" step="0.01" min="0" value="0">
+                                <span class="field-hint">0 = بدون حد</span>
+                            </div>
+                        </div>
                         <div class="col-2">
                             <div class="form-group">
                                 <label class="form-label">الرصيد (المديونية)</label>
@@ -365,11 +440,15 @@ registerPage('customers', async () => {
                             </div>
                         </div>
                     </div>
+                    <div class="form-group">
+                        <label class="form-label">ملاحظات</label>
+                        <textarea class="form-control" name="notes" rows="2"></textarea>
+                    </div>
                     <button type="button" class="btn btn-success" onclick="saveCustomer()" id="saveCustBtn">
                         <span class="spinner"></span>
-                        <span class="btn-text">💾 حفظ</span>
+                        <span class="btn-text">💾 حفظ (Ctrl+S)</span>
                     </button>
-                    <button type="button" class="btn btn-secondary" onclick="document.getElementById('customerFormCard').style.display='none'">إلغاء</button>
+                    <button type="button" class="btn btn-secondary" onclick="cancelCustomerForm()">إلغاء (Esc)</button>
                 </form>
             </div>
         </div>`;
@@ -380,13 +459,11 @@ registerPage('customers', async () => {
 async function loadCustomers() {
     showSkeleton('customersTable');
     
-    // Load both customers list and aging data
     const [custResult, agingResult] = await Promise.all([
         api.get('/api/customers'),
         api.get('/api/customers/debt-aging?days=15')
     ]);
     
-    // Build aging map
     const agingMap = {};
     if (agingResult && agingResult.status === 'success') {
         agingResult.data.forEach(a => { agingMap[a.id] = a.days_overdue; });
@@ -440,6 +517,16 @@ function openCustomerForm() {
     document.getElementById('customerFormTitle').textContent = 'إضافة عميل جديد';
     resetForm('customerForm');
     document.getElementById('custId').value = '';
+    DraftManager.bindForm('customerForm', 'customer_form_new', {
+        indicator: document.getElementById('customerDraftIndicator')
+    });
+    setupEnterNavigation('customerForm');
+    setTimeout(() => document.querySelector('#customerForm [name="name"]')?.focus(), 100);
+}
+
+function cancelCustomerForm() {
+    document.getElementById('customerFormCard').style.display = 'none';
+    DraftManager.unbind('customerForm', false);
 }
 
 async function editCustomer(id) {
@@ -449,6 +536,9 @@ async function editCustomer(id) {
         document.getElementById('customerFormTitle').textContent = 'تعديل بيانات العميل';
         populateForm('customerForm', result.data);
         document.getElementById('custId').value = id;
+        DraftManager.bindForm('customerForm', `customer_form_edit_${id}`, {
+            indicator: document.getElementById('customerDraftIndicator')
+        });
     }
 }
 
@@ -469,7 +559,8 @@ async function saveCustomer() {
     }
     setButtonLoading(btn, false);
     if (result.status === 'success') {
-        showToast(id ? 'تم تحديث العميل' : 'تم إضافة العميل');
+        showToast(id ? 'تم تحديث العميل ✅' : 'تم إضافة العميل ✅');
+        DraftManager.unbind('customerForm', true);
         document.getElementById('customerFormCard').style.display = 'none';
         loadCustomers();
     } else {
@@ -560,7 +651,9 @@ async function prepareSettlement() {
             expensesHtml += `<tr><td>${exp.category_name}</td><td class="num">${formatMoney(exp.amount)}</td><td>${exp.notes || '-'}</td></tr>`;
         });
 
-        const netReceivable = s.total_cash - s.total_commission - totalExpenses;
+        // Use Calc engine for settlement totals
+        const calc = Calc.settlement(d.cash_sales, d.expenses, s.total_commission);
+        const netReceivable = calc.net_receivable;
 
         container.innerHTML = `
             <div class="card">
@@ -572,8 +665,8 @@ async function prepareSettlement() {
                     </div>
                     <div class="row" style="margin-bottom:20px;">
                         <div class="col-4"><div class="stat-card"><div class="stat-icon blue">🚚</div><div class="stat-info"><h3>${s.trip_count}</h3><p>عدد الحمولات</p></div></div></div>
-                        <div class="col-4"><div class="stat-card"><div class="stat-icon green">💵</div><div class="stat-info"><h3>${formatMoney(s.total_cash)}</h3><p>إجمالي النقد</p></div></div></div>
-                        <div class="col-4"><div class="stat-card"><div class="stat-icon red">💳</div><div class="stat-info"><h3>${formatMoney(s.total_due)}</h3><p>الديون الآجلة</p></div></div></div>
+                        <div class="col-4"><div class="stat-card"><div class="stat-icon green">💵</div><div class="stat-info"><h3>${formatMoney(calc.total_cash)}</h3><p>إجمالي النقد</p></div></div></div>
+                        <div class="col-4"><div class="stat-card"><div class="stat-icon red">💳</div><div class="stat-info"><h3>${formatMoney(calc.total_due)}</h3><p>الديون الآجلة</p></div></div></div>
                     </div>
                     
                     <h3 style="margin:16px 0 8px;">🧾 مبيعات اليوم النقدية</h3>
@@ -588,18 +681,13 @@ async function prepareSettlement() {
                         <tbody>${expensesHtml || '<tr><td colspan="3" style="text-align:center">لا توجد مصروفات</td></tr>'}</tbody>
                     </table>
 
-                    <div style="margin-top:20px; padding:16px; background:#f8f9fa; border-radius:8px;">
-                        <div class="row">
-                            <div class="col-2"><p>💵 إجمالي النقد: <strong>${formatMoney(s.total_cash)}</strong></p></div>
-                            <div class="col-2"><p>➖ العمولة: <strong>${formatMoney(s.total_commission)}</strong></p></div>
-                        </div>
-                        <div class="row">
-                            <div class="col-2"><p>➖ المصروفات: <strong>${formatMoney(totalExpenses)}</strong></p></div>
-                            <div class="col-2">
-                                <div class="financial-total ${netReceivable >= 0 ? 'success' : 'danger'}">
-                                    الصافي المستلم: ${formatMoney(netReceivable)} ريال
-                                </div>
-                            </div>
+                    <div class="calc-summary-card" style="margin-top:20px;">
+                        <div class="calc-summary-item"><span class="label">💵 إجمالي النقد</span><span class="value">${formatMoney(calc.total_cash)}</span></div>
+                        <div class="calc-summary-item"><span class="label">➖ العمولة</span><span class="value">${formatMoney(calc.total_commission)}</span></div>
+                        <div class="calc-summary-item"><span class="label">➖ المصروفات</span><span class="value">${formatMoney(calc.total_expenses)}</span></div>
+                        <div class="calc-summary-item ${netReceivable >= 0 ? 'highlight' : 'danger'}">
+                            <span class="label">الصافي المستلم</span>
+                            <span class="value">${formatMoney(netReceivable)} ${Calc.defaults.currency}</span>
                         </div>
                     </div>
                 </div>
@@ -616,7 +704,7 @@ async function prepareSettlement() {
             <div style="margin-top:16px; display:flex; gap:12px;">
                 <button class="btn btn-primary btn-lg" onclick="finalizeSettlement(${driverId}, '${date}', ${netReceivable})" id="finalizeBtn">
                     <span class="spinner"></span>
-                    <span class="btn-text">✅ حفظ التصفية</span>
+                    <span class="btn-text">✅ حفظ التصفية (Ctrl+S)</span>
                 </button>
                 <button class="btn btn-secondary btn-lg" onclick="printContent('settlementPrintArea')">🖨️ طباعة السند</button>
             </div>`;
@@ -629,7 +717,6 @@ function openPaymentModal(driverId) {
     document.getElementById('paySettlementId').value = '';
     openModal('paymentModal');
     
-    // On customer change, show balance
     document.getElementById('payCustomerId').onchange = async function() {
         const custId = this.value;
         if (custId) {
@@ -650,12 +737,10 @@ async function savePayment() {
     if (data.settlement_id) {
         result = await api.post('/api/settlements/add-detail', data);
     } else {
-        // Will be handled during finalization
         showToast('سيتم حفظ التحصيل عند إنهاء التصفية', 'info');
         closeModal('paymentModal');
         setButtonLoading(btn, false);
         
-        // Add to local collections list
         const listEl = document.getElementById('collectionsList');
         if (listEl) {
             const custName = document.getElementById('payCustomerId').selectedOptions[0]?.text || '';
@@ -671,7 +756,6 @@ async function savePayment() {
     if (result && result.status === 'success') {
         showToast('تم تسجيل الدفعة بنجاح');
         closeModal('paymentModal');
-        // Refresh customer balance immediately
         prepareSettlement();
     } else {
         showToast(result?.message || 'خطأ', 'error');
@@ -682,7 +766,6 @@ async function finalizeSettlement(driverId, date, netReceivable) {
     const btn = document.getElementById('finalizeBtn');
     setButtonLoading(btn, true);
 
-    // Collect all pending collections
     const collectionEls = document.querySelectorAll('.collection-data');
     const details = [];
     collectionEls.forEach(el => {
@@ -714,10 +797,13 @@ registerPage('expenses', async () => {
     mc.innerHTML = `
         <div class="page-header">
             <h1>📤 المصروفات</h1>
-            <button class="btn btn-primary" onclick="document.getElementById('expenseFormCard').style.display=''">+ مصروف جديد</button>
+            <button class="btn btn-primary" data-quick-new onclick="openExpenseForm()">+ مصروف جديد</button>
         </div>
         <div class="card" id="expenseFormCard" style="display:none;">
-            <div class="card-header">إضافة مصروف</div>
+            <div class="card-header">
+                <span>إضافة مصروف</span>
+                <span class="draft-indicator" id="expenseDraftIndicator"></span>
+            </div>
             <div class="card-body">
                 <form id="expenseForm">
                     <div class="row">
@@ -746,9 +832,9 @@ registerPage('expenses', async () => {
                     </div>
                     <button type="button" class="btn btn-success" onclick="saveExpense()" id="saveExpBtn">
                         <span class="spinner"></span>
-                        <span class="btn-text">💾 حفظ المصروف</span>
+                        <span class="btn-text">💾 حفظ المصروف (Ctrl+S)</span>
                     </button>
-                    <button type="button" class="btn btn-secondary" onclick="document.getElementById('expenseFormCard').style.display='none'">إلغاء</button>
+                    <button type="button" class="btn btn-secondary" onclick="cancelExpenseForm()">إلغاء (Esc)</button>
                 </form>
             </div>
         </div>
@@ -764,6 +850,21 @@ registerPage('expenses', async () => {
     await loadSelect('expDriverId', '/api/drivers/active', 'id', 'name', 'بدون سائق (مصروف محطة)');
     loadExpenses();
 });
+
+function openExpenseForm() {
+    document.getElementById('expenseFormCard').style.display = '';
+    resetForm('expenseForm');
+    DraftManager.bindForm('expenseForm', 'expense_form', {
+        indicator: document.getElementById('expenseDraftIndicator')
+    });
+    setupEnterNavigation('expenseForm');
+    setTimeout(() => document.getElementById('expCategoryId')?.focus(), 100);
+}
+
+function cancelExpenseForm() {
+    document.getElementById('expenseFormCard').style.display = 'none';
+    DraftManager.unbind('expenseForm', false);
+}
 
 async function loadExpenses() {
     const date = document.getElementById('expDateFilter')?.value || todayDate();
@@ -791,7 +892,8 @@ async function saveExpense() {
     const result = await api.post('/api/expenses', data);
     setButtonLoading(btn, false);
     if (result.status === 'success') {
-        showToast('تم حفظ المصروف');
+        showToast('تم حفظ المصروف ✅');
+        DraftManager.unbind('expenseForm', true);
         document.getElementById('expenseFormCard').style.display = 'none';
         resetForm('expenseForm');
         loadExpenses();
@@ -848,7 +950,7 @@ registerPage('fund', async () => {
                 <div style="margin-top:16px;">
                     <button class="btn btn-danger btn-lg" onclick="saveCashClosing()" id="saveClosingBtn">
                         <span class="spinner"></span>
-                        <span class="btn-text">🔒 تأكيد الإقفال</span>
+                        <span class="btn-text">🔒 تأكيد الإقفال (Ctrl+S)</span>
                     </button>
                 </div>
             </div>
@@ -876,7 +978,6 @@ async function loadFund() {
             { key: 'transaction_date', title: 'الوقت', type: 'datetime' }
         ], d.transactions);
 
-        // Store for closing
         window._fundData = d;
     }
 }
@@ -887,6 +988,7 @@ function showClosingForm() {
     document.getElementById('closingFormCard').style.display = '';
     document.getElementById('closingOpening').value = formatMoney(d.opening_balance);
     document.getElementById('closingExpected').value = formatMoney(d.current_balance);
+    setTimeout(() => document.getElementById('closingActual')?.focus(), 100);
 }
 
 function calcClosingDiff() {
@@ -954,7 +1056,10 @@ registerPage('inventory', async () => {
             </div>
         </div>
         <div class="card" id="purchaseFormCard" style="display:none;">
-            <div class="card-header">🛒 فاتورة شراء</div>
+            <div class="card-header">
+                <span>🛒 فاتورة شراء</span>
+                <span class="draft-indicator" id="purchaseDraftIndicator"></span>
+            </div>
             <div class="card-body">
                 <form id="purchaseForm">
                     <div class="row">
@@ -962,8 +1067,8 @@ registerPage('inventory', async () => {
                         <div class="col-4"><div class="form-group"><label class="form-label">الكمية *</label><input type="number" class="form-control" name="quantity" min="1" required oninput="calcPurchaseTotal()"></div></div>
                         <div class="col-4"><div class="form-group"><label class="form-label">سعر الوحدة *</label><input type="number" class="form-control money-input" name="unit_price" step="0.01" min="0" required oninput="calcPurchaseTotal()"></div></div>
                     </div>
-                    <div class="form-group"><label class="form-label">الإجمالي</label><input type="number" class="form-control" name="total_amount" id="purchTotal" readonly></div>
-                    <button type="button" class="btn btn-success" onclick="savePurchase()" id="savePurchBtn"><span class="spinner"></span><span class="btn-text">💾 حفظ الشراء</span></button>
+                    <div class="form-group"><label class="form-label">الإجمالي (محسوب آلياً)</label><input type="number" class="form-control auto-filled" name="total_amount" id="purchTotal" readonly></div>
+                    <button type="button" class="btn btn-success" onclick="savePurchase()" id="savePurchBtn"><span class="spinner"></span><span class="btn-text">💾 حفظ الشراء (Ctrl+S)</span></button>
                     <button type="button" class="btn btn-secondary" onclick="document.getElementById('purchaseFormCard').style.display='none'">إلغاء</button>
                 </form>
             </div>
@@ -1021,6 +1126,10 @@ function showItemForm() { document.getElementById('itemFormCard').style.display 
 async function showPurchaseForm() {
     document.getElementById('purchaseFormCard').style.display = '';
     await loadSelect('purchItemId', '/api/inventory/items', 'id', 'name', 'اختر الصنف...');
+    DraftManager.bindForm('purchaseForm', 'purchase_form', {
+        indicator: document.getElementById('purchaseDraftIndicator')
+    });
+    setupEnterNavigation('purchaseForm');
 }
 async function showIssueForm() {
     document.getElementById('issueFormCard').style.display = '';
@@ -1046,7 +1155,12 @@ async function savePurchase() {
     const data = getFormData('purchaseForm');
     const result = await api.post('/api/inventory/purchases', data);
     setButtonLoading(btn, false);
-    if (result.status === 'success') { showToast('تم حفظ عملية الشراء'); document.getElementById('purchaseFormCard').style.display = 'none'; loadItems(); }
+    if (result.status === 'success') {
+        showToast('تم حفظ عملية الشراء ✅');
+        DraftManager.unbind('purchaseForm', true);
+        document.getElementById('purchaseFormCard').style.display = 'none';
+        loadItems();
+    }
     else showToast(result.message, 'error');
 }
 
@@ -1486,7 +1600,6 @@ registerPage('settings', async () => {
         const settings = result.data;
         let html = '<form id="settForm">';
         
-        // Group commission settings
         html += '<h3 style="margin-bottom:12px;">💰 عمولات السائقين</h3><div class="row">';
         Object.keys(settings).forEach(key => {
             if (key.startsWith('commission_')) {
@@ -1496,17 +1609,30 @@ registerPage('settings', async () => {
         });
         html += '</div>';
         
-        // General settings
+        html += '<h3 style="margin:20px 0 12px;">💵 أسعار وضرائب</h3><div class="row">';
+        const moneyFields = {
+            'price_per_m3': 'سعر المتر المكعب الافتراضي',
+            'vat_rate':     'نسبة الضريبة %'
+        };
+        Object.entries(moneyFields).forEach(([key, label]) => {
+            const v = settings[key] !== undefined ? settings[key] : '';
+            html += `<div class="col-3"><div class="form-group"><label class="form-label">${label}</label><input type="number" class="form-control money-input" name="${key}" value="${v}" step="0.01" min="0"></div></div>`;
+        });
+        html += '</div>';
+
         html += '<h3 style="margin:20px 0 12px;">🏢 إعدادات عامة</h3><div class="row">';
-        ['company_name', 'company_phone', 'vat_rate'].forEach(key => {
-            if (settings[key] !== undefined) {
-                const labels = { company_name: 'اسم المحطة', company_phone: 'رقم الهاتف', vat_rate: 'نسبة الضريبة %' };
-                html += `<div class="col-3"><div class="form-group"><label class="form-label">${labels[key] || key}</label><input type="text" class="form-control" name="${key}" value="${settings[key]}"></div></div>`;
-            }
+        const textFields = {
+            'station_name': 'اسم المحطة',
+            'station_phone': 'رقم الهاتف',
+            'currency':     'العملة'
+        };
+        Object.entries(textFields).forEach(([key, label]) => {
+            const v = settings[key] !== undefined ? settings[key] : '';
+            html += `<div class="col-3"><div class="form-group"><label class="form-label">${label}</label><input type="text" class="form-control" name="${key}" value="${v}"></div></div>`;
         });
         html += '</div>';
         
-        html += '<div style="margin-top:16px;"><button type="button" class="btn btn-primary btn-lg" onclick="saveSettings()" id="saveSettBtn"><span class="spinner"></span><span class="btn-text">💾 حفظ الإعدادات</span></button>';
+        html += '<div style="margin-top:16px;"><button type="button" class="btn btn-primary btn-lg" onclick="saveSettings()" id="saveSettBtn"><span class="spinner"></span><span class="btn-text">💾 حفظ الإعدادات (Ctrl+S)</span></button>';
         html += ' <button type="button" class="btn btn-secondary" onclick="generateCommissions()">⚡ توليد عمولات جديدة</button></div>';
         html += '</form>';
         
@@ -1522,8 +1648,11 @@ async function saveSettings() {
     form.querySelectorAll('[name]').forEach(el => { settings[el.name] = el.value; });
     const result = await api.post('/api/settings', { settings });
     setButtonLoading(btn, false);
-    if (result.status === 'success') showToast('تم حفظ الإعدادات ✅');
-    else showToast(result.message, 'error');
+    if (result.status === 'success') {
+        showToast('تم حفظ الإعدادات ✅');
+        // Refresh defaults in calc engine
+        await Calc.loadDefaults();
+    } else showToast(result.message, 'error');
 }
 
 async function generateCommissions() {

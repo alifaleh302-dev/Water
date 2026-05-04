@@ -184,7 +184,8 @@ class Router {
                 strpos($uri, '/fund') === 0 || strpos($uri, '/inventory') === 0 ||
                 strpos($uri, '/reports') === 0 || strpos($uri, '/settings') === 0 ||
                 strpos($uri, '/users') === 0 || strpos($uri, '/dashboard') === 0 ||
-                strpos($uri, '/periods') === 0) {
+                strpos($uri, '/periods') === 0 ||
+                strpos($uri, '/calc') === 0 || strpos($uri, '/drafts') === 0) {
                 $uri = '/api' . $uri;
             }
         }

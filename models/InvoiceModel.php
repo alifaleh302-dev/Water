@@ -3,7 +3,7 @@ require_once __DIR__ . '/../core/Model.php';
 
 class InvoiceModel extends Model {
     protected string $table = 'Invoices';
-    protected array $fillable = ['trip_id', 'customer_id', 'invoice_date', 'quantity_m3', 'total_amount', 'discount_amount', 'net_amount', 'paid_amount', 'due_amount'];
+    protected array $fillable = ['trip_id', 'customer_id', 'invoice_date', 'quantity_m3', 'total_amount', 'discount_amount', 'net_amount', 'paid_amount', 'due_amount', 'vat_amount', 'price_per_m3', 'notes', 'created_by'];
 
     /**
      * Get invoices with full details
